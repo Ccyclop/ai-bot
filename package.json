@@ -12,5 +12,10 @@
   "type": "module",
   "dependencies": {
     "openai": "^6.37.0"
+  },
+  "functions": {
+    "api/webhook.js": {
+      "maxDuration": 30
+    }
   }
 }

@@ -23,9 +23,9 @@ export default async function handler(req, res) {
     return res.status(403).end();
   }
 
-  // Incoming messages
   if (req.method !== "POST") return res.status(405).end();
 
+  // Read and verify signature
   const raw = await readRawBody(req);
   const sig = req.headers["x-hub-signature-256"];
   const expected =
@@ -37,17 +37,18 @@ export default async function handler(req, res) {
   }
 
   const body = JSON.parse(raw.toString());
-  res.status(200).end(); // ACK fast — Meta requires <20s
 
   try {
     const msg = parseMessage(body);
-    if (!msg) return;
+    if (!msg) {
+      return res.status(200).end();
+    }
 
     console.log("Incoming:", msg.channel, msg.senderId, msg.text);
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      max_tokens: 250,
+      max_tokens: 150,
       messages: [
         {
           role: "system",
@@ -61,8 +62,11 @@ export default async function handler(req, res) {
     const reply = completion.choices[0].message.content;
     console.log("Reply:", reply);
     await sendReply(msg, reply);
+
+    return res.status(200).end();
   } catch (err) {
     console.error("Error:", err);
+    return res.status(200).end(); // still return 200 so Meta doesn't retry
   }
 }
 
