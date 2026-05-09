@@ -1,7 +1,15 @@
 import OpenAI from "openai";
 import crypto from "crypto";
+import { Redis } from "@upstash/redis";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_KV_REST_API_URL,
+  token: process.env.UPSTASH_REDIS_REST_KV_REST_API_TOKEN,
+});
+
+const HISTORY_TTL_SECONDS = 6 * 60 * 60;
+const MAX_HISTORY_MESSAGES = 10;
 
 export const config = { api: { bodyParser: false } };
 
@@ -118,12 +126,16 @@ export default async function handler(req, res) {
 
     console.log("Incoming:", msg.channel, msg.senderId, msg.text);
 
+    const historyKey = `chat:${msg.channel}:${msg.senderId}`;
+    const history = (await redis.get(historyKey)) ?? [];
+
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o", // upgraded — much better at Georgian
-      max_tokens: 300,
-      temperature: 0.7,
+      model: "gpt-5.4-mini",
+      max_completion_tokens: 300,
+      reasoning_effort: "minimal",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
+        ...history,
         { role: "user", content: msg.text },
       ],
     });
@@ -131,6 +143,13 @@ export default async function handler(req, res) {
     const reply = completion.choices[0].message.content;
     console.log("Reply:", reply);
     await sendReply(msg, reply);
+
+    const updated = [
+      ...history,
+      { role: "user", content: msg.text },
+      { role: "assistant", content: reply },
+    ].slice(-MAX_HISTORY_MESSAGES);
+    await redis.set(historyKey, updated, { ex: HISTORY_TTL_SECONDS });
 
     return res.status(200).end();
   } catch (err) {
