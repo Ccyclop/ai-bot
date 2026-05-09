@@ -63,7 +63,7 @@ export default async function handler(req, res) {
     const completion = await openai.chat.completions.create({
       model: "gpt-5.4-mini",
       max_completion_tokens: 300,
-      reasoning_effort: "minimal",
+      reasoning_effort: "none",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         ...history,
